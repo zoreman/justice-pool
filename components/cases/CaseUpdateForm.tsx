@@ -1,0 +1,75 @@
+type CaseUpdateFormProps = {
+  caseId: string;
+  action: (
+    caseId: string,
+    formData: FormData,
+  ) => Promise<void>;
+};
+
+export default function CaseUpdateForm({
+  caseId,
+  action,
+}: CaseUpdateFormProps) {
+  return (
+    <form
+      action={action.bind(null, caseId)}
+      className="border-t border-slate-200 pt-10"
+    >
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-600">
+        Case owner
+      </p>
+
+      <h2 className="mt-4 text-3xl font-semibold tracking-[-0.03em] text-ink-950">
+        Post an update
+      </h2>
+
+      <p className="mt-3 max-w-2xl text-slate-600">
+        Share progress, legal developments, or important campaign news.
+      </p>
+
+      <div className="mt-8">
+        <label
+          htmlFor="update-title"
+          className="text-sm font-medium text-slate-700"
+        >
+          Update title
+        </label>
+
+        <input
+          id="update-title"
+          name="title"
+          type="text"
+          required
+          maxLength={120}
+          placeholder="Example: Attorney consultation completed"
+          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-ink-950 outline-none transition placeholder:text-slate-400 focus:border-brand-500"
+        />
+      </div>
+
+      <div className="mt-6">
+        <label
+          htmlFor="update-content"
+          className="text-sm font-medium text-slate-700"
+        >
+          Update details
+        </label>
+
+        <textarea
+          id="update-content"
+          name="content"
+          required
+          rows={6}
+          placeholder="Explain what changed and what happens next."
+          className="mt-2 w-full resize-y rounded-xl border border-slate-300 bg-white px-4 py-3 leading-7 text-ink-950 outline-none transition placeholder:text-slate-400 focus:border-brand-500"
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="mt-6 rounded-xl bg-brand-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-400"
+      >
+        Publish update
+      </button>
+    </form>
+  );
+}
