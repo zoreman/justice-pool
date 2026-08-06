@@ -27,28 +27,17 @@ type AttorneyDetails = {
   verified: boolean;
 };
 
-type ApplicationRecord = {
+type ApplicationRow = {
   id: number;
   attorney_id: string;
   cover_letter: string | null;
   status: string;
   created_at: string;
-  attorney: AttorneyDetails | AttorneyDetails[] | null;
 };
 
-function getAttorney(
-  attorney: ApplicationRecord["attorney"],
-): AttorneyDetails | null {
-  if (!attorney) {
-    return null;
-  }
-
-  if (Array.isArray(attorney)) {
-    return attorney[0] ?? null;
-  }
-
-  return attorney;
-}
+type ApplicationWithAttorney = ApplicationRow & {
+  attorney: AttorneyDetails;
+};
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
