@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-
+import MessagesLink from "@/components/messages/MessagesLink";
 import Container from "@/components/ui/Container";
 import { createClient } from "@/lib/supabase-server";
 import NotificationLink from "@/components/notifications/NotificationLink";
-
 type SubmittedCase = {
   id: string;
   title: string;
@@ -310,6 +309,7 @@ export default async function DashboardPage() {
 
             <div className="flex shrink-0 flex-wrap items-center gap-3 lg:pt-8">
   <NotificationLink variant="dashboard" />
+  <MessagesLink />
 
   {profile?.role === "admin" && (
     <Link

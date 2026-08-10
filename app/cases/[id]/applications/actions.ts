@@ -156,6 +156,24 @@ export async function acceptAttorneyApplication(
   }
 
   refreshApplicationPages(caseId);
+
+  const { error: conversationError } = await supabaseAdmin
+  .from("conversations")
+  .upsert(
+    {
+      case_id: caseId,
+      client_id: caseData.user_id,
+      attorney_id: application.attorney_id,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "case_id,client_id,attorney_id",
+    },
+  );
+
+if (conversationError) {
+  throw new Error(conversationError.message);
+}
 }
 
 export async function rejectAttorneyApplication(

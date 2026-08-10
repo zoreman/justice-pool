@@ -64,6 +64,8 @@ function formatRelativeTime(date: string) {
   switch (type) {
     case "case_approved":
       return "Case approved";
+  case "message":
+  return "New message";
     case "case_rejected":
       return "Case rejected";
     case "case_revision":
