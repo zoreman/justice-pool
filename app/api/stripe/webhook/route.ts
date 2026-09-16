@@ -87,6 +87,67 @@ export async function POST(request: Request) {
       }
     }
 
+        if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+
+      if (session.payment_status !== "paid") {
+        return NextResponse.json({ received: true });
+      }
+
+      const contributionId = Number(
+        session.metadata?.contribution_id,
+      );
+
+      const caseId = session.metadata?.case_id;
+
+      if (!Number.isInteger(contributionId) || !caseId) {
+        throw new Error("Missing contribution metadata.");
+      }
+
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : "";
+
+      const { error: completionError } =
+        await supabaseAdmin.rpc("complete_contribution", {
+          contribution_id_input: contributionId,
+          case_id_input: caseId,
+          payment_intent_input: paymentIntentId,
+        });
+
+      if (completionError) {
+        throw new Error(completionError.message);
+      }
+    } else if (event.type === "checkout.session.expired") {
+      const session = event.data.object;
+
+      const contributionId = Number(
+        session.metadata?.contribution_id,
+      );
+
+      if (!Number.isInteger(contributionId)) {
+        throw new Error(
+          "Missing contribution metadata for expired checkout.",
+        );
+      }
+
+      const { error: expirationError } =
+        await supabaseAdmin
+          .from("contributions")
+          .update({
+            status: "expired",
+          })
+          .eq("id", contributionId)
+          .eq("status", "pending");
+
+      if (expirationError) {
+        throw new Error(
+          expirationError.message,
+        );
+      }
+    }
+
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error("Webhook processing error:", error);

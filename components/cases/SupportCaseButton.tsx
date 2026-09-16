@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
-import { supabase } from "@/lib/supabase-browser";
+import { toggleCaseSupport } from "@/app/cases/[id]/support-actions";
 
 type SupportCaseButtonProps = {
   caseId: string;
@@ -19,9 +19,14 @@ export default function SupportCaseButton({
 }: SupportCaseButtonProps) {
   const router = useRouter();
 
-  const [isSupported, setIsSupported] = useState(initialSupported);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [isSupported, setIsSupported] =
+    useState(initialSupported);
+
+  const [isLoading, setIsLoading] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
 
   async function handleSupport() {
     if (!userId || isLoading) {
@@ -31,37 +36,22 @@ export default function SupportCaseButton({
     setIsLoading(true);
     setMessage("");
 
-    if (isSupported) {
-      const { error } = await supabase
-        .from("case_supporters")
-        .delete()
-        .eq("case_id", caseId)
-        .eq("user_id", userId);
+    try {
+      const result =
+        await toggleCaseSupport(caseId);
 
-      if (error) {
-        setMessage(error.message);
-        setIsLoading(false);
-        return;
-      }
+      setIsSupported(result.supported);
 
-      setIsSupported(false);
-    } else {
-      const { error } = await supabase.from("case_supporters").insert({
-        case_id: caseId,
-        user_id: userId,
-      });
-
-      if (error) {
-        setMessage(error.message);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsSupported(true);
+      router.refresh();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update support status.",
+      );
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-    router.refresh();
   }
 
   if (!userId) {
@@ -81,21 +71,37 @@ export default function SupportCaseButton({
         type="button"
         onClick={handleSupport}
         disabled={isLoading}
-        className={`rounded-2xl border px-6 py-4 font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+        aria-busy={isLoading}
+        aria-pressed={isSupported}
+        className={`flex w-full items-center justify-center gap-2 rounded-2xl border px-6 py-4 font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
           isSupported
             ? "border-brand-400/30 bg-brand-500/10 text-brand-200 hover:bg-brand-500/15"
             : "border-white/10 text-slate-300 hover:bg-white/5 hover:text-white"
         }`}
       >
+        {isLoading && (
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"
+          />
+        )}
+
         {isLoading
-          ? "Updating..."
+          ? isSupported
+            ? "Unfollowing..."
+            : "Following..."
           : isSupported
             ? "Following this case"
             : "Follow this case"}
       </button>
 
       {message && (
-        <p className="mt-3 text-center text-sm text-red-300">{message}</p>
+        <p
+          role="alert"
+          className="mt-3 text-center text-sm text-red-300"
+        >
+          {message}
+        </p>
       )}
     </div>
   );

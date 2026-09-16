@@ -17,7 +17,10 @@ async function requireAdmin() {
     redirect("/login");
   }
 
-  const { data: profile, error } = await supabase
+  const {
+    data: profile,
+    error,
+  } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
@@ -30,6 +33,8 @@ async function requireAdmin() {
   if (profile?.role !== "admin") {
     redirect("/dashboard");
   }
+
+  return user;
 }
 
 function refreshAttorneyPages() {
@@ -38,37 +43,82 @@ function refreshAttorneyPages() {
   revalidatePath("/attorney/cases");
   revalidatePath("/dashboard");
   revalidatePath("/notifications");
+  revalidatePath("/become-an-attorney");
 }
 
-export async function verifyAttorney(attorneyId: string) {
+export async function verifyAttorney(
+  attorneyId: string,
+) {
   await requireAdmin();
 
-  const { data: attorney, error: attorneyError } =
-    await supabaseAdmin
-      .from("attorneys")
-      .select("id, full_name")
-      .eq("id", attorneyId)
-      .single();
+  const {
+    data: attorney,
+    error: attorneyError,
+  } = await supabaseAdmin
+    .from("attorneys")
+    .select(
+      `
+        id,
+        full_name,
+        verification_status
+      `,
+    )
+    .eq("id", attorneyId)
+    .single();
 
-  if (attorneyError || !attorney) {
+  if (
+    attorneyError ||
+    !attorney
+  ) {
     throw new Error(
-      attorneyError?.message ?? "Attorney not found.",
+      attorneyError?.message ??
+        "Attorney not found.",
     );
   }
 
-  const { error: updateError } = await supabaseAdmin
+  if (
+    attorney.verification_status !==
+    "pending"
+  ) {
+    throw new Error(
+      "This attorney application has already been reviewed.",
+    );
+  }
+
+  const {
+    data: updatedAttorney,
+    error: updateError,
+  } = await supabaseAdmin
     .from("attorneys")
     .update({
       verified: true,
       accepting_cases: true,
+      verification_status:
+        "verified",
     })
-    .eq("id", attorneyId);
+    .eq("id", attorneyId)
+    .eq(
+      "verification_status",
+      "pending",
+    )
+    .select("id")
+    .maybeSingle();
 
   if (updateError) {
-    throw new Error(updateError.message);
+    throw new Error(
+      updateError.message,
+    );
   }
 
-  const { error: profileError } = await supabaseAdmin
+  if (!updatedAttorney) {
+    throw new Error(
+      "The attorney application changed before verification completed. Refresh and try again.",
+    );
+  }
+
+  const {
+    error: profileError,
+  } = await supabaseAdmin
     .from("profiles")
     .update({
       role: "attorney",
@@ -76,55 +126,126 @@ export async function verifyAttorney(attorneyId: string) {
     .eq("id", attorneyId);
 
   if (profileError) {
-    throw new Error(profileError.message);
+    /*
+     * Roll back verification if the
+     * profile role cannot be updated.
+     */
+    await supabaseAdmin
+      .from("attorneys")
+      .update({
+        verified: false,
+        accepting_cases: false,
+        verification_status:
+          "pending",
+      })
+      .eq("id", attorneyId);
+
+    throw new Error(
+      profileError.message,
+    );
   }
 
-  const { error: notificationError } =
-    await supabaseAdmin.rpc("create_notification", {
-      user_id_input: attorneyId,
-      type_input: "attorney_verified",
-      title_input: "Attorney profile verified",
+  const {
+    error: notificationError,
+  } = await supabaseAdmin.rpc(
+    "create_notification",
+    {
+      user_id_input:
+        attorneyId,
+      type_input:
+        "attorney_verified",
+      title_input:
+        "Attorney profile verified",
       message_input:
         "Your attorney profile has been verified. You can now apply to represent cases.",
-      link_input: "/attorney/cases",
-    });
+      link_input:
+        "/attorney/cases",
+    },
+  );
 
   if (notificationError) {
-    throw new Error(notificationError.message);
+    console.error(
+      "Unable to create attorney verification notification:",
+      notificationError.message,
+    );
   }
 
   refreshAttorneyPages();
 }
 
-export async function rejectAttorney(attorneyId: string) {
+export async function rejectAttorney(
+  attorneyId: string,
+) {
   await requireAdmin();
 
-  const { data: attorney, error: attorneyError } =
-    await supabaseAdmin
-      .from("attorneys")
-      .select("id, full_name")
-      .eq("id", attorneyId)
-      .single();
+  const {
+    data: attorney,
+    error: attorneyError,
+  } = await supabaseAdmin
+    .from("attorneys")
+    .select(
+      `
+        id,
+        full_name,
+        verification_status
+      `,
+    )
+    .eq("id", attorneyId)
+    .single();
 
-  if (attorneyError || !attorney) {
+  if (
+    attorneyError ||
+    !attorney
+  ) {
     throw new Error(
-      attorneyError?.message ?? "Attorney not found.",
+      attorneyError?.message ??
+        "Attorney not found.",
     );
   }
 
-  const { error: updateError } = await supabaseAdmin
+  if (
+    attorney.verification_status !==
+    "pending"
+  ) {
+    throw new Error(
+      "This attorney application has already been reviewed.",
+    );
+  }
+
+  const {
+    data: updatedAttorney,
+    error: updateError,
+  } = await supabaseAdmin
     .from("attorneys")
     .update({
       verified: false,
       accepting_cases: false,
+      verification_status:
+        "rejected",
     })
-    .eq("id", attorneyId);
+    .eq("id", attorneyId)
+    .eq(
+      "verification_status",
+      "pending",
+    )
+    .select("id")
+    .maybeSingle();
 
   if (updateError) {
-    throw new Error(updateError.message);
+    throw new Error(
+      updateError.message,
+    );
   }
 
-  const { error: profileError } = await supabaseAdmin
+  if (!updatedAttorney) {
+    throw new Error(
+      "The attorney application changed before rejection completed. Refresh and try again.",
+    );
+  }
+
+  const {
+    error: profileError,
+  } = await supabaseAdmin
     .from("profiles")
     .update({
       role: "user",
@@ -132,21 +253,34 @@ export async function rejectAttorney(attorneyId: string) {
     .eq("id", attorneyId);
 
   if (profileError) {
-    throw new Error(profileError.message);
+    throw new Error(
+      profileError.message,
+    );
   }
 
-  const { error: notificationError } =
-    await supabaseAdmin.rpc("create_notification", {
-      user_id_input: attorneyId,
-      type_input: "attorney_rejected",
-      title_input: "Attorney verification update",
+  const {
+    error: notificationError,
+  } = await supabaseAdmin.rpc(
+    "create_notification",
+    {
+      user_id_input:
+        attorneyId,
+      type_input:
+        "attorney_rejected",
+      title_input:
+        "Attorney verification update",
       message_input:
         "Your attorney profile could not be verified. Review your information and contact support if needed.",
-      link_input: "/become-an-attorney",
-    });
+      link_input:
+        "/become-an-attorney",
+    },
+  );
 
   if (notificationError) {
-    throw new Error(notificationError.message);
+    console.error(
+      "Unable to create attorney rejection notification:",
+      notificationError.message,
+    );
   }
 
   refreshAttorneyPages();

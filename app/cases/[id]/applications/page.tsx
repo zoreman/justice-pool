@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import CaseActionButton from "@/components/cases/CaseActionButton";
 import Container from "@/components/ui/Container";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createClient } from "@/lib/supabase-server";
@@ -202,15 +203,19 @@ export default async function CaseApplicationsPage({
           </header>
 
           {applications.length === 0 ? (
-            <div className="py-20 text-center">
-              <h2 className="text-2xl font-semibold">
-                No applications yet
-              </h2>
+            <div className="mt-10 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">
+  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-xl text-slate-500">
+    —
+  </div>
 
-              <p className="mt-3 text-slate-500">
-                Verified attorneys can apply to represent your case.
-              </p>
-            </div>
+  <h2 className="mt-5 text-2xl font-semibold">
+    No applications yet
+  </h2>
+
+  <p className="mx-auto mt-3 max-w-md leading-7 text-slate-500">
+    Verified attorneys can apply to represent your case. New applications will appear here for your review.
+  </p>
+</div>
           ) : (
             <section className="mt-10 space-y-6">
               {applications.map((application) => {
@@ -293,39 +298,36 @@ export default async function CaseApplicationsPage({
                         </p>
                       </div>
 
-                      {isPending && !caseData.assigned_attorney_id && (
-                        <div className="flex shrink-0 flex-wrap gap-3">
-                          <form
-                            action={acceptAttorneyApplication.bind(
-                              null,
-                              caseData.id,
-                              application.id,
-                            )}
-                          >
-                            <button
-                              type="submit"
-                              className="rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold transition hover:bg-brand-400"
-                            >
-                              Select attorney
-                            </button>
-                          </form>
+                       {isPending && !caseData.assigned_attorney_id && (
+  <div className="flex shrink-0 flex-wrap gap-3">
+    <form
+      action={acceptAttorneyApplication.bind(
+        null,
+        caseData.id,
+        application.id,
+      )}
+    >
+      <CaseActionButton
+        label="Select attorney"
+        pendingLabel="Selecting..."
+      />
+    </form>
 
-                          <form
-                            action={rejectAttorneyApplication.bind(
-                              null,
-                              caseData.id,
-                              application.id,
-                            )}
-                          >
-                            <button
-                              type="submit"
-                              className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
-                            >
-                              Decline
-                            </button>
-                          </form>
-                        </div>
-                      )}
+    <form
+      action={rejectAttorneyApplication.bind(
+        null,
+        caseData.id,
+        application.id,
+      )}
+    >
+      <CaseActionButton
+        label="Decline"
+        pendingLabel="Declining..."
+        variant="danger"
+      />
+    </form>
+  </div>
+)}
                     </div>
                   </article>
                 );
@@ -336,5 +338,4 @@ export default async function CaseApplicationsPage({
       </Container>
     </main>
   );
-}
-console.log("PUBLIC APPLICATIONS PAGE LOADED");
+} 

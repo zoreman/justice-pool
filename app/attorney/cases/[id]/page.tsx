@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import ApplyToCaseForm from "@/components/attorney/ApplyToCaseForm";
 import Container from "@/components/ui/Container";
 import { createClient } from "@/lib/supabase-server";
 
@@ -37,7 +38,10 @@ export default async function AttorneyCasePage({
   const [
     { data: attorney, error: attorneyError },
     { data: caseData, error: caseError },
-    { data: existingApplication, error: applicationError },
+    {
+      data: existingApplication,
+      error: applicationError,
+    },
   ] = await Promise.all([
     supabase
       .from("attorneys")
@@ -67,7 +71,9 @@ export default async function AttorneyCasePage({
 
     supabase
       .from("attorney_applications")
-      .select("id, status, cover_letter, created_at")
+      .select(
+        "id, status, cover_letter, created_at",
+      )
       .eq("attorney_id", user.id)
       .eq("case_id", id)
       .maybeSingle(),
@@ -96,13 +102,23 @@ export default async function AttorneyCasePage({
     notFound();
   }
 
-  const raised = Number(caseData.raised) || 0;
-  const goal = Number(caseData.goal) || 0;
-  const supporters = Number(caseData.supporters) || 0;
+  const raised =
+    Number(caseData.raised) || 0;
+
+  const goal =
+    Number(caseData.goal) || 0;
+
+  const supporters =
+    Number(caseData.supporters) || 0;
 
   const progress =
     goal > 0
-      ? Math.min(Math.round((raised / goal) * 100), 100)
+      ? Math.min(
+          Math.round(
+            (raised / goal) * 100,
+          ),
+          100,
+        )
       : 0;
 
   return (
@@ -159,19 +175,23 @@ export default async function AttorneyCasePage({
                     </h2>
 
                     <p className="mt-2 leading-7 text-amber-100/70">
-                      Your license must be verified before you can apply to
-                      represent this case.
+                      Your license must be
+                      verified before you can
+                      apply to represent this
+                      case.
                     </p>
                   </div>
                 ) : !attorney.accepting_cases ? (
                   <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
                     <h2 className="font-semibold">
-                      You are not accepting new cases
+                      You are not accepting new
+                      cases
                     </h2>
 
                     <p className="mt-2 text-slate-400">
-                      Update your attorney profile before submitting an
-                      application.
+                      Update your attorney
+                      profile before submitting
+                      an application.
                     </p>
                   </div>
                 ) : existingApplication ? (
@@ -180,48 +200,23 @@ export default async function AttorneyCasePage({
                       Application status
                     </p>
 
-                    <p className="mt-2 capitalize font-semibold text-amber-300">
-                      {existingApplication.status}
+                    <p className="mt-2 font-semibold capitalize text-amber-300">
+                      {
+                        existingApplication.status
+                      }
                     </p>
 
                     <p className="mt-6 whitespace-pre-line leading-8 text-slate-300">
-                      {existingApplication.cover_letter}
+                      {
+                        existingApplication.cover_letter
+                      }
                     </p>
                   </div>
                 ) : (
-                  <form
-                    action={applyToCase.bind(null, caseData.id)}
-                    className="mt-6"
-                  >
-                    <label
-                      htmlFor="cover_letter"
-                      className="block text-sm font-medium text-slate-300"
-                    >
-                      Cover letter
-                    </label>
-
-                    <textarea
-                      id="cover_letter"
-                      name="cover_letter"
-                      required
-                      minLength={100}
-                      maxLength={3000}
-                      rows={10}
-                      placeholder="Explain your relevant experience, why you are interested in the case, and how you would approach representation."
-                      className="mt-3 w-full resize-y rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 leading-7 text-white outline-none transition placeholder:text-slate-600 focus:border-brand-400"
-                    />
-
-                    <p className="mt-2 text-sm text-slate-500">
-                      Minimum 100 characters.
-                    </p>
-
-                    <button
-                      type="submit"
-                      className="mt-6 rounded-xl bg-brand-500 px-6 py-3 font-semibold transition hover:bg-brand-400"
-                    >
-                      Submit application
-                    </button>
-                  </form>
+                  <ApplyToCaseForm
+                    caseId={caseData.id}
+                    action={applyToCase}
+                  />
                 )}
               </section>
             </section>
@@ -245,12 +240,15 @@ export default async function AttorneyCasePage({
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
                   <div
                     className="h-full rounded-full bg-brand-500"
-                    style={{ width: `${progress}%` }}
+                    style={{
+                      width: `${progress}%`,
+                    }}
                   />
                 </div>
 
                 <p className="mt-3 text-sm text-slate-500">
-                  of {formatCurrency(goal)} goal
+                  of {formatCurrency(goal)}{" "}
+                  goal
                 </p>
 
                 <dl className="mt-8 space-y-6 border-t border-white/10 pt-6">
@@ -270,7 +268,8 @@ export default async function AttorneyCasePage({
                     </dt>
 
                     <dd className="mt-1 text-xl font-semibold">
-                      {caseData.days_left} days
+                      {caseData.days_left}{" "}
+                      days
                     </dd>
                   </div>
                 </dl>

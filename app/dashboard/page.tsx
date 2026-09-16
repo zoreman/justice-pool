@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
 import MessagesLink from "@/components/messages/MessagesLink";
+import NotificationLink from "@/components/notifications/NotificationLink";
 import Container from "@/components/ui/Container";
 import { createClient } from "@/lib/supabase-server";
-import NotificationLink from "@/components/notifications/NotificationLink";
+
 type SubmittedCase = {
   id: string;
   title: string;
   category: string;
   status: string;
+  case_status: string | null;
   goal: number | string;
   raised: number | string;
   created_at: string;
@@ -58,37 +61,96 @@ function formatCurrency(amount: number | string) {
   }).format(Number(amount) || 0);
 }
 
+function normalizeStatus(status: string) {
+  return status.trim().toLowerCase();
+}
+
 function statusStyles(status: string) {
-  switch (status) {
+  switch (normalizeStatus(status)) {
     case "active":
+    case "approved":
       return "bg-emerald-400/10 text-emerald-300";
+
     case "pending":
-      return "bg-amber-400/10 text-amber-300";
-    case "needs_revision":
+    case "submitted":
       return "bg-blue-400/10 text-blue-300";
+
+    case "under_review":
+      return "bg-amber-400/10 text-amber-300";
+
+    case "needs_revision":
+      return "bg-orange-400/10 text-orange-300";
+
+    case "attorney_assigned":
+      return "bg-violet-400/10 text-violet-300";
+
+    case "consultation_scheduled":
+      return "bg-cyan-400/10 text-cyan-300";
+
+    case "documents_requested":
+      return "bg-orange-400/10 text-orange-300";
+
+    case "filing_prepared":
+    case "filed":
+      return "bg-indigo-400/10 text-indigo-300";
+
+    case "negotiation":
+    case "hearing":
+      return "bg-purple-400/10 text-purple-300";
+
+    case "resolved":
+      return "bg-emerald-400/10 text-emerald-300";
+
+    case "closed":
+      return "bg-slate-400/10 text-slate-300";
+
     case "rejected":
       return "bg-red-400/10 text-red-300";
+
     default:
       return "bg-white/5 text-slate-300";
   }
 }
 
 function statusLabel(status: string) {
-  switch (status) {
+  const normalized = normalizeStatus(status);
+
+  switch (normalized) {
     case "active":
+    case "approved":
       return "Approved";
+
     case "pending":
       return "Pending review";
+
     case "needs_revision":
       return "Changes requested";
+
     case "rejected":
       return "Rejected";
+
     default:
-      return status;
+      return normalized
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 }
 
-function getRelatedCase<T>(relatedCase: T | T[] | null): T | null {
+function caseProgressLabel(status: string | null) {
+  if (!status) {
+    return "Submitted";
+  }
+
+  return status
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getRelatedCase<T>(
+  relatedCase: T | T[] | null,
+): T | null {
   if (!relatedCase) {
     return null;
   }
@@ -125,7 +187,9 @@ export default async function DashboardPage() {
 
     supabase
       .from("cases")
-      .select("id, title, category, status, goal, raised, created_at")
+      .select(
+        "id, title, category, status, case_status, goal, raised, created_at",
+      )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
 
@@ -179,8 +243,12 @@ export default async function DashboardPage() {
     throw new Error(contributionError.message);
   }
 
-  const submittedCases = (submittedData ?? []) as SubmittedCase[];
-  const supportRecords = (supportedData ?? []) as SupportRecord[];
+  const submittedCases =
+    (submittedData ?? []) as SubmittedCase[];
+
+  const supportRecords =
+    (supportedData ?? []) as SupportRecord[];
+
   const contributionRecords =
     (contributionData ?? []) as ContributionRecord[];
 
@@ -197,7 +265,20 @@ export default async function DashboardPage() {
         id: number;
         created_at: string;
         case: FollowedCase;
-      } => support.case !== null && support.case.status === "active",
+      } => {
+        if (!support.case) {
+          return false;
+        }
+
+        const status = normalizeStatus(
+          support.case.status,
+        );
+
+        return (
+          status === "active" ||
+          status === "approved"
+        );
+      },
     );
 
   const contributions = contributionRecords
@@ -220,26 +301,43 @@ export default async function DashboardPage() {
       } => contribution.case !== null,
     );
 
-  const totalContributedCents = contributions.reduce(
-    (total, contribution) => total + Number(contribution.amount || 0),
-    0,
-  );
+  const totalContributedCents =
+    contributions.reduce(
+      (total, contribution) =>
+        total +
+        Number(contribution.amount || 0),
+      0,
+    );
 
-  const totalContributed = totalContributedCents / 100;
+  const totalContributed =
+    totalContributedCents / 100;
 
-  const approvedCases = submittedCases.filter(
-    (caseItem) => caseItem.status === "active",
-  ).length;
+  const approvedCases =
+    submittedCases.filter((caseItem) => {
+      const status =
+        normalizeStatus(caseItem.status);
 
-  const pendingCases = submittedCases.filter(
-    (caseItem) => caseItem.status === "pending",
-  ).length;
+      return (
+        status === "active" ||
+        status === "approved"
+      );
+    }).length;
 
-  const revisionCases = submittedCases.filter(
-    (caseItem) => caseItem.status === "needs_revision",
-  ).length;
+  const pendingCases =
+    submittedCases.filter((caseItem) => {
+      const status =
+        normalizeStatus(caseItem.status);
 
-  const displayName = profile?.full_name?.trim() || "Justice Pool user";
+      return (
+        status === "pending" ||
+        status === "submitted" ||
+        status === "under_review"
+      );
+    }).length;
+
+  const displayName =
+    profile?.full_name?.trim() ||
+    "Justice Pool user";
 
   const stats = [
     {
@@ -285,22 +383,35 @@ export default async function DashboardPage() {
               <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
                 <span>
                   {submittedCases.length}{" "}
-                  {submittedCases.length === 1 ? "case" : "cases"} submitted
+                  {submittedCases.length === 1
+                    ? "case"
+                    : "cases"}{" "}
+                  submitted
                 </span>
 
-                <span className="text-slate-700">•</span>
+                <span className="text-slate-700">
+                  •
+                </span>
 
                 <span>
                   {followedCases.length}{" "}
-                  {followedCases.length === 1 ? "case" : "cases"} followed
+                  {followedCases.length === 1
+                    ? "case"
+                    : "cases"}{" "}
+                  followed
                 </span>
 
                 {profile?.created_at && (
                   <>
-                    <span className="text-slate-700">•</span>
+                    <span className="text-slate-700">
+                      •
+                    </span>
 
                     <span>
-                      Member since {formatDate(profile.created_at)}
+                      Member since{" "}
+                      {formatDate(
+                        profile.created_at,
+                      )}
                     </span>
                   </>
                 )}
@@ -308,58 +419,62 @@ export default async function DashboardPage() {
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-3 lg:pt-8">
-  <NotificationLink variant="dashboard" />
-  <MessagesLink />
+              <NotificationLink variant="dashboard" />
+              <MessagesLink />
 
-  {profile?.role === "admin" && (
-    <Link
-      href="/admin"
-      className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
-    >
-      Admin
-    </Link>
-  )}
+              {profile?.role === "admin" && (
+                <Link
+                  href="/admin"
+                  className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
+                >
+                  Admin
+                </Link>
+              )}
 
-  {profile?.role === "attorney" && (
-    <Link
-      href="/attorney/dashboard"
-      className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
-    >
-      Attorney Dashboard
-    </Link>
-  )}
+              {profile?.role === "attorney" && (
+                <Link
+                  href="/attorney/dashboard"
+                  className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
+                >
+                  Attorney Dashboard
+                </Link>
+              )}
 
-  {profile?.role !== "admin" && profile?.role !== "attorney" && (
-    <Link
-      href="/become-an-attorney"
-      className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
-    >
-      Become an Attorney
-    </Link>
-  )}
+              {profile?.role !== "admin" &&
+                profile?.role !== "attorney" && (
+                  <Link
+                    href="/become-an-attorney"
+                    className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
+                  >
+                    Become an Attorney
+                  </Link>
+                )}
 
-  <Link
-    href="/profile"
-    className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
-  >
-    Profile
-  </Link>
+              <Link
+                href="/profile"
+                className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
+              >
+                Profile
+              </Link>
 
-  <Link
-    href="/submit-case"
-    className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-400"
-  >
-    <span>+</span>
-    Submit case
-  </Link>
-</div>
+              <Link
+                href="/submit-case"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-400"
+              >
+                <span>+</span>
+                Submit case
+              </Link>
+            </div>
           </div>
         </header>
 
         <section className="border-y border-white/10 py-9">
           <div className="grid grid-cols-2 gap-x-8 gap-y-9 sm:grid-cols-5">
             {stats.map((stat) => (
-              <div key={stat.label} className="min-w-0">
+              <div
+                key={stat.label}
+                className="min-w-0"
+              >
                 <p className="text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
                   {stat.value}
                 </p>
@@ -380,7 +495,8 @@ export default async function DashboardPage() {
               </h2>
 
               <p className="mt-3 text-slate-500">
-                Your latest submissions and review updates.
+                Your latest submissions and
+                review updates.
               </p>
             </div>
 
@@ -399,68 +515,93 @@ export default async function DashboardPage() {
               </h3>
 
               <p className="mt-3 text-slate-500">
-                Submit a case when you are ready to request legal support.
+                Submit a case when you are
+                ready to request legal support.
               </p>
             </div>
           ) : (
             <div className="mt-10 space-y-5">
-              {submittedCases.map((caseItem) => (
-                <article
-                  key={caseItem.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.025] px-7 py-7"
-                >
-                  <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold sm:text-2xl">
-                        {caseItem.title}
-                      </h3>
+              {submittedCases.map(
+                (caseItem) => {
+                  const normalizedStatus =
+                    normalizeStatus(
+                      caseItem.status,
+                    );
 
-                      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 text-sm">
-                        <span className="text-slate-500">
-                          {caseItem.category}
-                        </span>
+                  return (
+                    <article
+                      key={caseItem.id}
+                      className="rounded-2xl border border-white/10 bg-white/[0.025] px-7 py-7"
+                    >
+                      <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <h3 className="text-xl font-semibold sm:text-2xl">
+                            {caseItem.title}
+                          </h3>
 
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
-                            caseItem.status,
-                          )}`}
-                        >
-                          {statusLabel(caseItem.status)}
-                        </span>
+                          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 text-sm">
+                            <span className="text-slate-500">
+                              {caseItem.category}
+                            </span>
 
-                        <span className="text-slate-500">
-                          Submitted {formatDate(caseItem.created_at)}
-                        </span>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
+                                caseItem.status,
+                              )}`}
+                            >
+                              {statusLabel(
+                                caseItem.status,
+                              )}
+                            </span>
+
+                            <span className="rounded-full bg-brand-400/10 px-3 py-1 text-xs font-medium text-brand-300">
+                              {caseProgressLabel(
+                                caseItem.case_status,
+                              )}
+                            </span>
+
+                            <span className="text-slate-500">
+                              Submitted{" "}
+                              {formatDate(
+                                caseItem.created_at,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-8">
+                          <div>
+                            <p className="text-xs text-slate-500">
+                              Funding goal
+                            </p>
+
+                            <p className="mt-2 text-lg font-semibold">
+                              {formatCurrency(
+                                caseItem.goal,
+                              )}
+                            </p>
+                          </div>
+
+                          <Link
+                            href={
+                              normalizedStatus ===
+                              "needs_revision"
+                                ? `/cases/${caseItem.id}/edit`
+                                : `/cases/${caseItem.id}`
+                            }
+                            className="text-sm font-semibold text-brand-300 transition hover:text-white"
+                          >
+                            {normalizedStatus ===
+                            "needs_revision"
+                              ? "Edit case →"
+                              : "View case →"}
+                          </Link>
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-8">
-                      <div>
-                        <p className="text-xs text-slate-500">
-                          Funding goal
-                        </p>
-
-                        <p className="mt-2 text-lg font-semibold">
-                          {formatCurrency(caseItem.goal)}
-                        </p>
-                      </div>
-
-                      <Link
-                        href={
-                          caseItem.status === "needs_revision"
-                            ? `/cases/${caseItem.id}/edit`
-                            : `/cases/${caseItem.id}`
-                        }
-                        className="text-sm font-semibold text-brand-300 transition hover:text-white"
-                      >
-                        {caseItem.status === "needs_revision"
-                          ? "Edit case →"
-                          : "View case →"}
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                    </article>
+                  );
+                },
+              )}
             </div>
           )}
         </section>
@@ -472,14 +613,16 @@ export default async function DashboardPage() {
             </h2>
 
             <p className="mt-3 text-slate-500">
-              Completed payments you have made to legal campaigns.
+              Completed payments you have made
+              to legal campaigns.
             </p>
           </div>
 
           {contributions.length === 0 ? (
             <div className="mt-10 rounded-2xl border border-dashed border-white/10 px-8 py-12">
               <p className="text-slate-500">
-                You have not made any contributions yet.
+                You have not made any
+                contributions yet.
               </p>
 
               <Link
@@ -491,37 +634,50 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="mt-10 overflow-hidden rounded-2xl border border-white/10">
-              {contributions.map((contribution, index) => (
-                <article
-                  key={contribution.id}
-                  className={`flex flex-col gap-6 px-7 py-6 sm:flex-row sm:items-center sm:justify-between ${
-                    index > 0 ? "border-t border-white/10" : ""
-                  }`}
-                >
-                  <div>
-                    <Link
-                      href={`/cases/${contribution.case.id}`}
-                      className="text-lg font-semibold transition hover:text-brand-300"
-                    >
-                      {contribution.case.title}
-                    </Link>
+              {contributions.map(
+                (contribution, index) => (
+                  <article
+                    key={contribution.id}
+                    className={`flex flex-col gap-6 px-7 py-6 sm:flex-row sm:items-center sm:justify-between ${
+                      index > 0
+                        ? "border-t border-white/10"
+                        : ""
+                    }`}
+                  >
+                    <div>
+                      <Link
+                        href={`/cases/${contribution.case.id}`}
+                        className="text-lg font-semibold transition hover:text-brand-300"
+                      >
+                        {
+                          contribution.case
+                            .title
+                        }
+                      </Link>
 
-                    <p className="mt-2 text-sm text-slate-500">
-                      Paid {formatDate(contribution.created_at)}
-                    </p>
-                  </div>
+                      <p className="mt-2 text-sm text-slate-500">
+                        Paid{" "}
+                        {formatDate(
+                          contribution.created_at,
+                        )}
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-5">
-                    <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">
-                      Paid
-                    </span>
+                    <div className="flex items-center gap-5">
+                      <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">
+                        Paid
+                      </span>
 
-                    <p className="text-xl font-semibold">
-                      {formatCurrency(contribution.amount / 100)}
-                    </p>
-                  </div>
-                </article>
-              ))}
+                      <p className="text-xl font-semibold">
+                        {formatCurrency(
+                          contribution.amount /
+                            100,
+                        )}
+                      </p>
+                    </div>
+                  </article>
+                ),
+              )}
             </div>
           )}
         </section>
@@ -532,25 +688,38 @@ export default async function DashboardPage() {
           </h2>
 
           <p className="mt-3 text-slate-500">
-            Active cases you have chosen to follow.
+            Active cases you have chosen to
+            follow.
           </p>
 
           {followedCases.length === 0 ? (
             <div className="mt-10 rounded-2xl border border-dashed border-white/10 px-8 py-12">
               <p className="text-slate-500">
-                You are not following any cases yet.
+                You are not following any cases
+                yet.
               </p>
             </div>
           ) : (
             <div className="mt-10 grid gap-5 lg:grid-cols-2">
               {followedCases.map((support) => {
-                const caseItem = support.case;
-                const goal = Number(caseItem.goal) || 0;
-                const raised = Number(caseItem.raised) || 0;
+                const caseItem =
+                  support.case;
+
+                const goal =
+                  Number(caseItem.goal) || 0;
+
+                const raised =
+                  Number(caseItem.raised) || 0;
 
                 const progress =
                   goal > 0
-                    ? Math.min(Math.round((raised / goal) * 100), 100)
+                    ? Math.min(
+                        Math.round(
+                          (raised / goal) *
+                            100,
+                        ),
+                        100,
+                      )
                     : 0;
 
                 return (
@@ -568,14 +737,21 @@ export default async function DashboardPage() {
 
                     <div className="mt-7">
                       <div className="flex justify-between text-sm text-slate-500">
-                        <span>Funding progress</span>
-                        <span>{progress}%</span>
+                        <span>
+                          Funding progress
+                        </span>
+
+                        <span>
+                          {progress}%
+                        </span>
                       </div>
 
                       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
                         <div
                           className="h-full rounded-full bg-brand-500"
-                          style={{ width: `${progress}%` }}
+                          style={{
+                            width: `${progress}%`,
+                          }}
                         />
                       </div>
                     </div>

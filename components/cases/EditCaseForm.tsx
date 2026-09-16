@@ -1,9 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 
-import { supabase } from "@/lib/supabase-browser";
+import { resubmitCase } from "@/app/cases/[id]/edit/actions";
 
 type EditCaseFormProps = {
   caseData: {
@@ -17,81 +21,98 @@ type EditCaseFormProps = {
   };
 };
 
-export default function EditCaseForm({ caseData }: EditCaseFormProps) {
+export default function EditCaseForm({
+  caseData,
+}: EditCaseFormProps) {
   const router = useRouter();
 
-  const [title, setTitle] = useState(caseData.title);
-  const [category, setCategory] = useState(caseData.category);
-  const [goal, setGoal] = useState(String(caseData.goal));
-  const [summary, setSummary] = useState(caseData.summary ?? "");
-  const [story, setStory] = useState(caseData.story ?? "");
-  const [daysLeft, setDaysLeft] = useState(String(caseData.days_left));
+  const [isPending, startTransition] =
+    useTransition();
 
-  const [message, setMessage] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [title, setTitle] =
+    useState(caseData.title);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const [category, setCategory] =
+    useState(caseData.category);
+
+  const [goal, setGoal] =
+    useState(String(caseData.goal));
+
+  const [summary, setSummary] =
+    useState(caseData.summary ?? "");
+
+  const [story, setStory] =
+    useState(caseData.story ?? "");
+
+  const [daysLeft, setDaysLeft] =
+    useState(String(caseData.days_left));
+
+  const [message, setMessage] =
+    useState("");
+
+  function clearMessage() {
+    if (message) {
+      setMessage("");
+    }
+  }
+
+  function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
 
+    if (isPending) {
+      return;
+    }
+
     setMessage("");
-    setIsSaving(true);
 
-    const fundingGoal = Number(goal);
-    const campaignDays = Number(daysLeft);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
 
-    if (!Number.isFinite(fundingGoal) || fundingGoal <= 0) {
-      setMessage("Enter a valid funding goal.");
-      setIsSaving(false);
-      return;
-    }
-
-    if (!Number.isInteger(campaignDays) || campaignDays <= 0) {
-      setMessage("Enter a valid campaign length.");
-      setIsSaving(false);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("cases")
-      .update({
-        title: title.trim(),
-        category,
-        goal: fundingGoal,
-        description: summary.trim(),
-        summary: summary.trim(),
-        story: story.trim(),
-        days_left: campaignDays,
-        status: "pending",
-        verified: false,
-        review_notes: null,
-      })
-      .eq("id", caseData.id);
-
-    if (error) {
-      setMessage(error.message);
-      setIsSaving(false);
-      return;
-    }
-
-    router.push("/dashboard");
-    router.refresh();
+    startTransition(async () => {
+      try {
+        await resubmitCase(
+          caseData.id,
+          formData,
+        );
+      } catch (error) {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to resubmit case.",
+        );
+      }
+    });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-7">
+    <form
+      onSubmit={handleSubmit}
+      aria-busy={isPending}
+      className="space-y-7"
+    >
       <div>
-        <label htmlFor="title" className="text-sm font-medium text-slate-300">
+        <label
+          htmlFor="title"
+          className="text-sm font-medium text-slate-300"
+        >
           Case title
         </label>
 
         <input
           id="title"
+          name="title"
           type="text"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            clearMessage();
+          }}
           required
           maxLength={120}
-          className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400"
+          disabled={isPending}
+          className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         />
       </div>
 
@@ -106,51 +127,95 @@ export default function EditCaseForm({ caseData }: EditCaseFormProps) {
 
           <select
             id="category"
+            name="category"
             value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 outline-none transition focus:border-brand-400"
+            onChange={(event) => {
+              setCategory(event.target.value);
+              clearMessage();
+            }}
+            disabled={isPending}
+            className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <option>Employment</option>
-            <option>Housing</option>
-            <option>Civil Rights</option>
-            <option>Disability Discrimination</option>
-            <option>Consumer Protection</option>
-            <option>Education</option>
-            <option>Immigration</option>
-            <option>Other</option>
+            <option value="Employment">
+              Employment
+            </option>
+
+            <option value="Housing">
+              Housing
+            </option>
+
+            <option value="Civil Rights">
+              Civil Rights
+            </option>
+
+            <option value="Disability Discrimination">
+              Disability Discrimination
+            </option>
+
+            <option value="Consumer Protection">
+              Consumer Protection
+            </option>
+
+            <option value="Education">
+              Education
+            </option>
+
+            <option value="Immigration">
+              Immigration
+            </option>
+
+            <option value="Other">
+              Other
+            </option>
           </select>
         </div>
 
         <div>
-          <label htmlFor="goal" className="text-sm font-medium text-slate-300">
+          <label
+            htmlFor="goal"
+            className="text-sm font-medium text-slate-300"
+          >
             Funding goal
           </label>
 
           <input
             id="goal"
+            name="goal"
             type="number"
             value={goal}
-            onChange={(event) => setGoal(event.target.value)}
+            onChange={(event) => {
+              setGoal(event.target.value);
+              clearMessage();
+            }}
             min="1"
             required
-            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400"
+            disabled={isPending}
+            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
       </div>
 
       <div>
-        <label htmlFor="summary" className="text-sm font-medium text-slate-300">
+        <label
+          htmlFor="summary"
+          className="text-sm font-medium text-slate-300"
+        >
           Short summary
         </label>
 
         <textarea
           id="summary"
+          name="summary"
           value={summary}
-          onChange={(event) => setSummary(event.target.value)}
+          onChange={(event) => {
+            setSummary(event.target.value);
+            clearMessage();
+          }}
           required
           maxLength={350}
           rows={4}
-          className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400"
+          disabled={isPending}
+          className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         />
 
         <p className="mt-2 text-right text-xs text-slate-500">
@@ -159,17 +224,25 @@ export default function EditCaseForm({ caseData }: EditCaseFormProps) {
       </div>
 
       <div>
-        <label htmlFor="story" className="text-sm font-medium text-slate-300">
+        <label
+          htmlFor="story"
+          className="text-sm font-medium text-slate-300"
+        >
           Full story
         </label>
 
         <textarea
           id="story"
+          name="story"
           value={story}
-          onChange={(event) => setStory(event.target.value)}
+          onChange={(event) => {
+            setStory(event.target.value);
+            clearMessage();
+          }}
           required
           rows={10}
-          className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400"
+          disabled={isPending}
+          className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         />
       </div>
 
@@ -183,18 +256,26 @@ export default function EditCaseForm({ caseData }: EditCaseFormProps) {
 
         <input
           id="daysLeft"
+          name="days_left"
           type="number"
           value={daysLeft}
-          onChange={(event) => setDaysLeft(event.target.value)}
+          onChange={(event) => {
+            setDaysLeft(event.target.value);
+            clearMessage();
+          }}
           min="1"
           max="365"
           required
-          className="mt-2 w-full max-w-xs rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400"
+          disabled={isPending}
+          className="mt-2 w-full max-w-xs rounded-xl border border-white/10 bg-white/5 px-4 py-3 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         />
       </div>
 
       {message && (
-        <p className="rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-200">
+        <p
+          role="alert"
+          className="rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-200"
+        >
           {message}
         </p>
       )}
@@ -202,17 +283,29 @@ export default function EditCaseForm({ caseData }: EditCaseFormProps) {
       <div className="flex flex-col gap-3 border-t border-white/10 pt-7 sm:flex-row">
         <button
           type="submit"
-          disabled={isSaving}
-          className="rounded-xl bg-brand-500 px-6 py-3 font-semibold transition hover:bg-brand-400 disabled:opacity-60"
+          disabled={isPending}
+          aria-busy={isPending}
+          className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-6 py-3 font-semibold transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSaving ? "Resubmitting..." : "Save and resubmit"}
+          {isPending && (
+            <span
+              aria-hidden="true"
+              className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+            />
+          )}
+
+          {isPending
+            ? "Resubmitting..."
+            : "Save and resubmit"}
         </button>
 
         <button
           type="button"
-          onClick={() => router.push("/dashboard")}
-          disabled={isSaving}
-          className="rounded-xl border border-white/10 px-6 py-3 font-semibold text-slate-300 transition hover:bg-white/5"
+          onClick={() =>
+            router.push("/dashboard")
+          }
+          disabled={isPending}
+          className="rounded-xl border border-white/10 px-6 py-3 font-semibold text-slate-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Cancel
         </button>

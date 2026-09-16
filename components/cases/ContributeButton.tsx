@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
 
 type ContributeButtonProps = {
   caseId: string;
@@ -62,14 +62,18 @@ export default function ContributeButton({
       };
 
       if (!response.ok || !result.url) {
-        setMessage(result.error ?? "Unable to start checkout.");
+        setMessage(
+          result.error ?? "Unable to start checkout.",
+        );
         setIsLoading(false);
         return;
       }
 
       window.location.href = result.url;
     } catch {
-      setMessage("Something went wrong while starting checkout.");
+      setMessage(
+        "Something went wrong while starting checkout.",
+      );
       setIsLoading(false);
     }
   }
@@ -94,17 +98,20 @@ export default function ContributeButton({
       <div className="mt-3 grid grid-cols-3 gap-3">
         {presetAmounts.map((amount) => {
           const isSelected =
-            customAmount === "" && selectedAmount === amount;
+            customAmount === "" &&
+            selectedAmount === amount;
 
           return (
             <button
               key={amount}
               type="button"
+              disabled={isLoading}
               onClick={() => {
                 setSelectedAmount(amount);
                 setCustomAmount("");
+                setMessage("");
               }}
-              className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
+              className={`rounded-xl border px-3 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 isSelected
                   ? "border-brand-400 bg-brand-500/15 text-white"
                   : "border-white/10 text-slate-300 hover:bg-white/5"
@@ -126,23 +133,37 @@ export default function ContributeButton({
           min="1"
           max="10000"
           step="1"
+          disabled={isLoading}
           value={customAmount}
-          onChange={(event) => setCustomAmount(event.target.value)}
+          onChange={(event) => {
+            setCustomAmount(event.target.value);
+            setMessage("");
+          }}
           placeholder="Custom amount"
-          className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-8 pr-4 text-white outline-none transition placeholder:text-slate-500 focus:border-brand-400"
+          className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-8 pr-4 text-white outline-none transition placeholder:text-slate-500 focus:border-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-slate-400">
+      <label
+        className={`mt-4 flex items-start gap-3 text-sm leading-6 text-slate-400 ${
+          isLoading
+            ? "cursor-not-allowed opacity-50"
+            : "cursor-pointer"
+        }`}
+      >
         <input
           type="checkbox"
           checked={anonymous}
-          onChange={(event) => setAnonymous(event.target.checked)}
+          disabled={isLoading}
+          onChange={(event) =>
+            setAnonymous(event.target.checked)
+          }
           className="mt-1 h-4 w-4 shrink-0 rounded border-white/20 bg-white/5 accent-blue-500"
         />
 
         <span>
-          Contribute anonymously. Your name will not appear publicly.
+          Contribute anonymously. Your name will not
+          appear publicly.
         </span>
       </label>
 
@@ -150,18 +171,34 @@ export default function ContributeButton({
         type="button"
         onClick={handleCheckout}
         disabled={isLoading}
-        className="mt-5 w-full rounded-2xl bg-brand-500 px-6 py-4 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:-translate-y-0.5 hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
+        aria-busy={isLoading}
+        className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 px-6 py-4 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:-translate-y-0.5 hover:bg-brand-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
       >
+        {isLoading && (
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+          />
+        )}
+
         {isLoading
-          ? "Opening checkout..."
+          ? "Opening secure checkout..."
           : `Contribute $${amountInDollars || 0}`}
       </button>
 
       {message && (
-        <p className="mt-3 text-center text-sm text-red-300">
+        <p
+          role="alert"
+          className="mt-3 text-center text-sm text-red-300"
+        >
           {message}
         </p>
       )}
+
+      <p className="mt-3 text-center text-xs text-slate-500">
+        You&apos;ll review your contribution before
+        completing payment.
+      </p>
     </div>
   );
 }

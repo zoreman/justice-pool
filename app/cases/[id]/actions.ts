@@ -5,6 +5,16 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase-server";
 
+function assertCaseIsOpen(
+  caseStatus: string,
+) {
+  if (caseStatus === "closed") {
+    throw new Error(
+      "This case is closed and can no longer be modified.",
+    );
+  }
+}
+
 export async function createCaseUpdate(
   caseId: string,
   formData: FormData,
@@ -19,44 +29,82 @@ export async function createCaseUpdate(
     redirect("/login");
   }
 
-  const title = String(formData.get("title") ?? "").trim();
-  const content = String(formData.get("content") ?? "").trim();
+  const title = String(
+    formData.get("title") ?? "",
+  ).trim();
+
+  const content = String(
+    formData.get("content") ?? "",
+  ).trim();
 
   if (!title) {
-    throw new Error("Enter an update title.");
+    throw new Error(
+      "Enter an update title.",
+    );
   }
 
   if (!content) {
-    throw new Error("Enter update details.");
+    throw new Error(
+      "Enter update details.",
+    );
   }
 
-  const { data: caseData, error: caseError } = await supabase
+  const {
+    data: caseData,
+    error: caseError,
+  } = await supabase
     .from("cases")
-    .select("id, user_id")
+    .select(
+      `
+        id,
+        user_id,
+        case_status
+      `,
+    )
     .eq("id", caseId)
     .single();
 
   if (caseError || !caseData) {
-    throw new Error(caseError?.message ?? "Case not found.");
+    throw new Error(
+      caseError?.message ??
+        "Case not found.",
+    );
   }
 
-  if (caseData.user_id !== user.id) {
-    throw new Error("You do not have permission to update this case.");
+  assertCaseIsOpen(
+    caseData.case_status,
+  );
+
+  if (
+    caseData.user_id !==
+    user.id
+  ) {
+    throw new Error(
+      "You do not have permission to update this case.",
+    );
   }
 
-  const { error } = await supabase
-    .from("case_updates")
-    .insert({
-      case_id: caseId,
-      title,
-      content,
-      user_id: user.id,
-    });
+  const { error } =
+    await supabase
+      .from("case_updates")
+      .insert({
+        case_id: caseId,
+        title,
+        content,
+        author_id: user.id,
+      });
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(
+      error.message,
+    );
   }
 
-  revalidatePath(`/cases/${caseId}`);
-  revalidatePath("/dashboard");
+  revalidatePath(
+    `/cases/${caseId}`,
+  );
+
+  revalidatePath(
+    "/dashboard",
+  );
 }

@@ -1,89 +1,63 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  useActionState,
+  useState,
+} from "react";
+import {
+  useFormStatus,
+} from "react-dom";
 import { useRouter } from "next/navigation";
 
-import { supabase } from "@/lib/supabase-browser";
+import {
+  submitCase,
+  type SubmitCaseState,
+} from "@/app/submit-case/actions";
 
-type SubmitCaseFormProps = {
-  userId: string;
+const initialState: SubmitCaseState = {
+  error: null,
 };
 
-function createSlug(title: string) {
-  const cleanedTitle = title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-
-  return `${cleanedTitle}-${Date.now()}`;
-}
-
-export default function SubmitCaseForm({
-  userId,
-}: SubmitCaseFormProps) {
-  const router = useRouter();
-
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("Employment");
-  const [goal, setGoal] = useState("");
-  const [summary, setSummary] = useState("");
-  const [story, setStory] = useState("");
-  const [daysLeft, setDaysLeft] = useState("30");
-
-  const [message, setMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    setMessage("");
-    setIsSubmitting(true);
-
-    const fundingGoal = Number(goal);
-    const deadlineDays = Number(daysLeft);
-
-    if (!Number.isFinite(fundingGoal) || fundingGoal <= 0) {
-      setMessage("Enter a valid funding goal.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (!Number.isInteger(deadlineDays) || deadlineDays <= 0) {
-      setMessage("Enter a valid number of days.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    const caseId = createSlug(title);
-
-     const { error } = await supabase.from("cases").insert({
-  id: caseId,
-  user_id: userId,
-  title: title.trim(),
-  description: summary.trim(),
-  category,
-  goal: fundingGoal,
-  raised: 0,
-  summary: summary.trim(),
-  story: story.trim(),
-  days_left: deadlineDays,
-  status: "pending",
-});
-
-    if (error) {
-      setMessage(error.message);
-      setIsSubmitting(false);
-      return;
-    }
-
-    router.push(`/cases/${caseId}`);
-    router.refresh();
-  }
+function SubmitButton() {
+  const {
+    pending,
+  } = useFormStatus();
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-7">
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-2xl bg-brand-500 px-7 py-4 font-semibold transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending
+        ? "Submitting Case..."
+        : "Submit Case"}
+    </button>
+  );
+}
+
+export default function SubmitCaseForm() {
+  const router =
+    useRouter();
+
+  const [
+    state,
+    formAction,
+  ] = useActionState(
+    submitCase,
+    initialState,
+  );
+
+  const [
+    summary,
+    setSummary,
+  ] = useState("");
+
+  return (
+    <form
+      action={formAction}
+      className="space-y-7"
+    >
       <div>
         <label
           htmlFor="title"
@@ -96,8 +70,6 @@ export default function SubmitCaseForm({
           id="title"
           name="title"
           type="text"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
           placeholder="Example: Wrongful termination after reporting misconduct"
           required
           maxLength={120}
@@ -117,18 +89,40 @@ export default function SubmitCaseForm({
           <select
             id="category"
             name="category"
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
+            defaultValue="Employment"
             className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-brand-400"
           >
-            <option>Employment</option>
-            <option>Housing</option>
-            <option>Civil Rights</option>
-            <option>Disability Discrimination</option>
-            <option>Consumer Protection</option>
-            <option>Education</option>
-            <option>Immigration</option>
-            <option>Other</option>
+            <option>
+              Employment
+            </option>
+
+            <option>
+              Housing
+            </option>
+
+            <option>
+              Civil Rights
+            </option>
+
+            <option>
+              Disability Discrimination
+            </option>
+
+            <option>
+              Consumer Protection
+            </option>
+
+            <option>
+              Education
+            </option>
+
+            <option>
+              Immigration
+            </option>
+
+            <option>
+              Other
+            </option>
           </select>
         </div>
 
@@ -149,8 +143,6 @@ export default function SubmitCaseForm({
               id="goal"
               name="goal"
               type="number"
-              value={goal}
-              onChange={(event) => setGoal(event.target.value)}
               placeholder="10000"
               min="1"
               step="1"
@@ -173,7 +165,13 @@ export default function SubmitCaseForm({
           id="summary"
           name="summary"
           value={summary}
-          onChange={(event) => setSummary(event.target.value)}
+          onChange={(
+            event,
+          ) =>
+            setSummary(
+              event.target.value,
+            )
+          }
           placeholder="Give visitors a short overview of the case."
           required
           maxLength={350}
@@ -182,7 +180,8 @@ export default function SubmitCaseForm({
         />
 
         <p className="mt-2 text-right text-xs text-slate-500">
-          {summary.length}/350
+          {summary.length}
+          /350
         </p>
       </div>
 
@@ -197,8 +196,6 @@ export default function SubmitCaseForm({
         <textarea
           id="story"
           name="story"
-          value={story}
-          onChange={(event) => setStory(event.target.value)}
           placeholder="Explain what happened, who was affected, and what legal support is needed."
           required
           rows={9}
@@ -208,7 +205,7 @@ export default function SubmitCaseForm({
 
       <div>
         <label
-          htmlFor="daysLeft"
+          htmlFor="days_left"
           className="text-sm font-medium text-slate-300"
         >
           Campaign Length
@@ -216,11 +213,10 @@ export default function SubmitCaseForm({
 
         <div className="relative mt-2 max-w-xs">
           <input
-            id="daysLeft"
-            name="daysLeft"
+            id="days_left"
+            name="days_left"
             type="number"
-            value={daysLeft}
-            onChange={(event) => setDaysLeft(event.target.value)}
+            defaultValue="30"
             min="1"
             max="365"
             required
@@ -233,26 +229,23 @@ export default function SubmitCaseForm({
         </div>
       </div>
 
-      {message && (
+      {state.error && (
         <p className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-200">
-          {message}
+          {state.error}
         </p>
       )}
 
       <div className="flex flex-col gap-3 border-t border-white/10 pt-7 sm:flex-row">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded-2xl bg-brand-500 px-7 py-4 font-semibold transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Submitting Case..." : "Submit Case"}
-        </button>
+        <SubmitButton />
 
         <button
           type="button"
-          onClick={() => router.push("/dashboard")}
-          disabled={isSubmitting}
-          className="rounded-2xl border border-white/10 px-7 py-4 font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-60"
+          onClick={() =>
+            router.push(
+              "/dashboard",
+            )
+          }
+          className="rounded-2xl border border-white/10 px-7 py-4 font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
         >
           Cancel
         </button>

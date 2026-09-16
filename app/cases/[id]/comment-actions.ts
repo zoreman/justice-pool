@@ -6,6 +6,24 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createClient } from "@/lib/supabase-server";
 
+function assertCaseIsOpen(
+  caseStatus: string,
+) {
+  if (caseStatus === "closed") {
+    throw new Error(
+      "This case is closed and can no longer be modified.",
+    );
+  }
+}
+
+function refreshCommentPages(
+  caseId: string,
+) {
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath("/notifications");
+  revalidatePath("/dashboard");
+}
+
 export async function createComment(
   caseId: string,
   formData: FormData,
@@ -20,27 +38,52 @@ export async function createComment(
     redirect("/login");
   }
 
-  const content = String(formData.get("content") ?? "").trim();
+  const content = String(
+    formData.get("content") ?? "",
+  ).trim();
 
   if (!content) {
-    throw new Error("Enter a comment.");
+    throw new Error(
+      "Enter a comment.",
+    );
   }
 
   if (content.length > 1000) {
-    throw new Error("Comments cannot exceed 1,000 characters.");
+    throw new Error(
+      "Comments cannot exceed 1,000 characters.",
+    );
   }
 
-  const { data: caseData, error: caseError } = await supabaseAdmin
+  const {
+    data: caseData,
+    error: caseError,
+  } = await supabaseAdmin
     .from("cases")
-    .select("id, title, user_id")
+    .select(
+      `
+        id,
+        title,
+        user_id,
+        case_status
+      `,
+    )
     .eq("id", caseId)
     .single();
 
   if (caseError || !caseData) {
-    throw new Error(caseError?.message ?? "Case not found.");
+    throw new Error(
+      caseError?.message ??
+        "Case not found.",
+    );
   }
 
-  const { error: commentError } = await supabase
+  assertCaseIsOpen(
+    caseData.case_status,
+  );
+
+  const {
+    error: commentError,
+  } = await supabase
     .from("case_comments")
     .insert({
       case_id: caseId,
@@ -49,29 +92,44 @@ export async function createComment(
     });
 
   if (commentError) {
-    throw new Error(commentError.message);
+    throw new Error(
+      commentError.message,
+    );
   }
 
-  if (caseData.user_id && caseData.user_id !== user.id) {
-    const { error: notificationError } = await supabaseAdmin.rpc(
+  if (
+    caseData.user_id &&
+    caseData.user_id !== user.id
+  ) {
+    const {
+      error: notificationError,
+    } = await supabaseAdmin.rpc(
       "create_notification",
       {
-        user_id_input: caseData.user_id,
-        type_input: "comment",
-        title_input: "New comment on your case",
-        message_input: `Someone commented on "${caseData.title}".`,
-        link_input: `/cases/${caseId}`,
+        user_id_input:
+          caseData.user_id,
+        type_input:
+          "comment",
+        title_input:
+          "New comment on your case",
+        message_input:
+          `Someone commented on "${caseData.title}".`,
+        link_input:
+          `/cases/${caseId}`,
       },
     );
 
     if (notificationError) {
-      throw new Error(notificationError.message);
+      console.error(
+        "Unable to create comment notification:",
+        notificationError.message,
+      );
     }
   }
 
-  revalidatePath(`/cases/${caseId}`);
-  revalidatePath("/notifications");
-  revalidatePath("/dashboard");
+  refreshCommentPages(
+    caseId,
+  );
 }
 
 export async function deleteComment(
@@ -88,15 +146,56 @@ export async function deleteComment(
     redirect("/login");
   }
 
-  const { error } = await supabase
+  const {
+    data: caseData,
+    error: caseError,
+  } = await supabaseAdmin
+    .from("cases")
+    .select(
+      `
+        id,
+        case_status
+      `,
+    )
+    .eq("id", caseId)
+    .single();
+
+  if (caseError || !caseData) {
+    throw new Error(
+      caseError?.message ??
+        "Case not found.",
+    );
+  }
+
+  assertCaseIsOpen(
+    caseData.case_status,
+  );
+
+  const {
+    data: deletedComment,
+    error,
+  } = await supabase
     .from("case_comments")
     .delete()
     .eq("id", commentId)
-    .eq("user_id", user.id);
+    .eq("case_id", caseId)
+    .eq("user_id", user.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(
+      error.message,
+    );
   }
 
-  revalidatePath(`/cases/${caseId}`);
+  if (!deletedComment) {
+    throw new Error(
+      "Comment not found or you do not have permission to delete it.",
+    );
+  }
+
+  refreshCommentPages(
+    caseId,
+  );
 }
